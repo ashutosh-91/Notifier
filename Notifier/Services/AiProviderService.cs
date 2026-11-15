@@ -1,11 +1,12 @@
 using System.ClientModel;
 using Notifier.Models;
+using Notifier.Services.Interfaces;
 using OpenAI;
 using OpenAI.Chat;
 
 namespace Notifier.Services;
 
-public class AiProviderService(IConfiguration configuration)
+public class AiProviderService(IConfiguration configuration) : IAiProviderService
 {
 
     public async Task<string?> CompleteChatAsync(string systemPrompt,string userPrompt)

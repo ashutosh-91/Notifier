@@ -1,9 +1,10 @@
 using Notifier.Enums;
 using Notifier.Models;
+using Notifier.Services.Interfaces;
 
 namespace Notifier.Services;
 
-public class NotificationClassifierService(IConfiguration configuration, AiProviderService aiService,DiscordClientService discordClientService)
+public class NotificationClassifierService(IConfiguration configuration, IAiProviderService aiService,IDiscordClientService discordClientService)
 {
     
     public async Task ClassifyAndSendAsync(Notification notification)
@@ -11,7 +12,7 @@ public class NotificationClassifierService(IConfiguration configuration, AiProvi
         if (notification.Level>= NotificationLevel.Warning )
         {
          var result = await  aiService.CompleteChatAsync(configuration["Ai:SystemPrompts:NotificationClassifier"], notification.Message);
-         await discordClientService.SendMessageAsync(configuration["Discord:ChannelId"], result);
+         await discordClientService.SendMessageAsync(configuration["Discord:ChannelId"], "Hello");
         }
         
     }

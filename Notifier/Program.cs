@@ -1,18 +1,23 @@
 using System.Net.Http.Headers;
+using System.Text.Json.Serialization;
 using Notifier.Services;
+using Notifier.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddScoped<NotificationClassifierService>();
-builder.Services.AddScoped<AiProviderService>();
-builder.Services.AddHttpClient<DiscordClientService>( "Discord",(client) =>
+builder.Services.AddScoped<IAiProviderService, AiProviderService>();
+builder.Services.AddHttpClient<IDiscordClientService, DiscordClientService>( "Discord",(client) =>
 {
-    client.BaseAddress = new Uri("https://discordapp.com/api/v10");
+    client.BaseAddress = new Uri("https://discord.com/api/v10/");
     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bot", builder.Configuration["Discord:BotToken"]);
+    client.DefaultRequestHeaders.Accept.Add(
+        new MediaTypeWithQualityHeaderValue("application/json"));
 });
 var app = builder.Build();
 
@@ -24,24 +29,6 @@ if (app.Environment.IsDevelopment())
 
 //app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
 app.MapControllers();
 app.Run();
 
