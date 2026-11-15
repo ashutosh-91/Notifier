@@ -3,6 +3,8 @@ using Notifier.Models;
 using Notifier.Services;
 
 namespace Notifier.Controllers;
+
+[ApiController]
 [Route("api/v1/notifications")]
 public class NotificationController(NotificationClassifierService notificationClassifierService):ControllerBase
 {

@@ -488,3 +488,5 @@ Notifier.sln.DotSettings.user
 bin
 obj
 debug
+# JetBrains IDE
+.idea/
