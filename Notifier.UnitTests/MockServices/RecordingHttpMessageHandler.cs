@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace Notifier.UnitTests.Fakes;
+namespace Notifier.UnitTests.MockServices;
 
 /// <summary>
 /// Captures outgoing requests instead of sending them over the network.

@@ -1,11 +1,13 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Notifier.Services;
-using Notifier.UnitTests.Fakes;
+using Notifier.UnitTests.MockServices;
 
 namespace Notifier.UnitTests.Services;
 
+[TestFixture]
 public class DiscordClientServiceTests
 {
     private static DiscordClientService CreateService(RecordingHttpMessageHandler handler)
@@ -19,7 +21,7 @@ public class DiscordClientServiceTests
         return new DiscordClientService(httpClient, configuration);
     }
 
-    [Fact]
+    [Test]
     public async Task SendMessageAsync_posts_to_the_channel_messages_endpoint()
     {
         var handler = new RecordingHttpMessageHandler();
@@ -27,12 +29,13 @@ public class DiscordClientServiceTests
 
         await service.SendMessageAsync("42", "hi");
 
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal("https://discord.com/api/v10/channels/42/messages", request.RequestUri!.ToString());
+        Assert.That(handler.Requests, Has.Count.EqualTo(1));
+        Assert.That(handler.Requests[0].Method, Is.EqualTo(HttpMethod.Post));
+        Assert.That(handler.Requests[0].RequestUri!.ToString(),
+            Is.EqualTo("https://discord.com/api/v10/channels/42/messages"));
     }
 
-    [Fact]
+    [Test]
     public async Task SendMessageAsync_sends_the_message_as_content()
     {
         var handler = new RecordingHttpMessageHandler();
@@ -40,12 +43,12 @@ public class DiscordClientServiceTests
 
         await service.SendMessageAsync("42", "hi");
 
-        var body = Assert.Single(handler.RequestBodies);
-        using var document = JsonDocument.Parse(body);
-        Assert.Equal("hi", document.RootElement.GetProperty("content").GetString());
+        Assert.That(handler.RequestBodies, Has.Count.EqualTo(1));
+        using var document = JsonDocument.Parse(handler.RequestBodies[0]);
+        Assert.That(document.RootElement.GetProperty("content").GetString(), Is.EqualTo("hi"));
     }
 
-    [Fact]
+    [Test]
     public async Task SendMessageAsync_sends_json_content()
     {
         var handler = new RecordingHttpMessageHandler();
@@ -53,7 +56,16 @@ public class DiscordClientServiceTests
 
         await service.SendMessageAsync("42", "hi");
 
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
+        Assert.That(handler.Requests, Has.Count.EqualTo(1));
+        Assert.That(handler.Requests[0].Content!.Headers.ContentType!.MediaType, Is.EqualTo("application/json"));
+    }
+
+    [Test]
+    public async Task SendMessageAsync_throws_when_discord_returns_an_error()
+    {
+        var handler = new RecordingHttpMessageHandler { ResponseStatusCode = HttpStatusCode.BadRequest };
+        var service = CreateService(handler);
+
+        Assert.ThrowsAsync<HttpRequestException>(async () => await service.SendMessageAsync("42", "hi"));
     }
 }

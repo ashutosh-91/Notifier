@@ -1,59 +1,138 @@
+using System.Net;
+using System.Threading.RateLimiting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Notifier.Enums;
 using Notifier.Models;
 using Notifier.Services;
-using Notifier.UnitTests.Fakes;
+using Notifier.UnitTests.MockServices;
 
 namespace Notifier.UnitTests.Services;
 
+[TestFixture]
 public class NotificationClassifierServiceTests
 {
     private const string SystemPrompt = "classify";
     private const string ChannelId = "42";
 
-    private static (NotificationClassifierService Service, FakeAiProviderService Ai, FakeDiscordClientService Discord) CreateService()
+    private static (NotificationClassifierService Service, MockAiProviderService Ai, MockDiscordClientService Discord) CreateService(RateLimiter? limiter = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Discord:ChannelId"] = ChannelId,
-                ["Ai:SystemPrompts:NotificationClassifier"] = SystemPrompt
+                ["Discord:ChannelId"] = ChannelId
             })
             .Build();
 
-        var ai = new FakeAiProviderService();
-        var discord = new FakeDiscordClientService();
+        var aiOptions = Options.Create(new Ai
+        {
+            BaseUrl = "https://example.test",
+            Model = "test-model",
+            ApiKey = "test-key",
+            SystemPrompts = new SystemPrompts { NotificationClassifier = SystemPrompt }
+        });
 
-        return (new NotificationClassifierService(configuration, ai, discord), ai, discord);
+        var ai = new MockAiProviderService();
+        var discord = new MockDiscordClientService();
+
+        return (new NotificationClassifierService(configuration, ai, discord, aiOptions, limiter ?? CreateLimiter()), ai, discord);
     }
 
-    [Fact]
-    public async Task ClassifyAndSendAsync_does_nothing_for_info_notifications()
+    private static TokenBucketRateLimiter CreateLimiter(int tokenLimit = 10) =>
+        new(new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = tokenLimit,
+            TokensPerPeriod = 1,
+            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+            AutoReplenishment = false
+        });
+
+    [Test]
+    public async Task Info_notification_is_not_forwarded()
     {
         var (service, ai, discord) = CreateService();
 
-        await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Info, "just an update"));
+        var result = await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Info, "just an update"));
 
-        Assert.Empty(ai.Calls);
-        Assert.Empty(discord.Calls);
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.NotForwarded));
+        Assert.That(ai.Calls, Is.Empty);
+        Assert.That(discord.Calls, Is.Empty);
     }
 
-    [Theory]
-    [InlineData(NotificationLevel.Warning)]
-    [InlineData(NotificationLevel.Error)]
-    [InlineData(NotificationLevel.Critical)]
-    public async Task ClassifyAndSendAsync_classifies_then_sends_for_warning_or_above(NotificationLevel level)
+    [TestCase(NotificationLevel.Warning)]
+    [TestCase(NotificationLevel.Error)]
+    [TestCase(NotificationLevel.Critical)]
+    public async Task Warning_or_above_is_classified_then_forwarded(NotificationLevel level)
     {
         var (service, ai, discord) = CreateService();
 
-        await service.ClassifyAndSendAsync(new Notification(1, level, "something happened"));
+        var result = await service.ClassifyAndSendAsync(new Notification(1, level, "something happened"));
 
-        var aiCall = Assert.Single(ai.Calls);
-        Assert.Equal(SystemPrompt, aiCall.SystemPrompt);
-        Assert.Equal("something happened", aiCall.UserPrompt);
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.Forwarded));
+        Assert.That(result.Message, Is.EqualTo("classified"));
 
-        var discordCall = Assert.Single(discord.Calls);
-        Assert.Equal(ChannelId, discordCall.ChannelId);
-        Assert.Equal("Hello", discordCall.Message);
+        Assert.That(ai.Calls, Has.Count.EqualTo(1));
+        Assert.That(ai.Calls[0].SystemPrompt, Is.EqualTo(SystemPrompt));
+        Assert.That(ai.Calls[0].UserPrompt, Is.EqualTo("something happened"));
+
+        Assert.That(discord.Calls, Has.Count.EqualTo(1));
+        Assert.That(discord.Calls[0].ChannelId, Is.EqualTo(ChannelId));
+        Assert.That(discord.Calls[0].Message, Is.EqualTo("classified"));
+    }
+
+    [Test]
+    public async Task Notification_is_dropped_when_rate_limited()
+    {
+        var (service, ai, discord) = CreateService(CreateLimiter(tokenLimit: 1));
+
+        await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Warning, "first"));
+        var result = await service.ClassifyAndSendAsync(new Notification(2, NotificationLevel.Warning, "second"));
+
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.RateLimited));
+        Assert.That(result.RetryAfter, Is.Not.Null);
+        Assert.That(ai.Calls, Has.Count.EqualTo(1));
+        Assert.That(discord.Calls, Has.Count.EqualTo(1));
+    }
+
+    [TestCase(HttpStatusCode.InternalServerError)]
+    [TestCase(HttpStatusCode.BadGateway)]
+    [TestCase(HttpStatusCode.ServiceUnavailable)]
+    public async Task Ai_failure_is_reported_and_discord_is_not_called(HttpStatusCode statusCode)
+    {
+        var (service, ai, discord) = CreateService();
+        ai.ThrowOnCall = new HttpRequestException("ai failed", null, statusCode);
+
+        var result = await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Warning, "boom"));
+
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.AiUnavailable));
+        Assert.That(discord.Calls, Is.Empty);
+    }
+
+    [TestCase(HttpStatusCode.InternalServerError)]
+    [TestCase(HttpStatusCode.BadGateway)]
+    [TestCase(HttpStatusCode.ServiceUnavailable)]
+    public async Task Discord_failure_is_reported(HttpStatusCode statusCode)
+    {
+        var (service, ai, discord) = CreateService();
+        discord.ThrowOnCall = new HttpRequestException("discord failed", null, statusCode);
+
+        var result = await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Warning, "boom"));
+
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.DiscordUnavailable));
+        Assert.That(ai.Calls, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Falls_back_to_the_original_message_when_the_ai_returns_nothing()
+    {
+        var (service, ai, discord) = CreateService();
+        ai.Result = null;
+
+        var result = await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Warning, "original"));
+
+        Assert.That(result.Outcome, Is.EqualTo(NotificationOutcome.Forwarded));
+        Assert.That(result.Message, Is.Null);
+        Assert.That(discord.Calls, Has.Count.EqualTo(1));
+        Assert.That(discord.Calls[0].Message, Is.EqualTo("original"));
     }
 }

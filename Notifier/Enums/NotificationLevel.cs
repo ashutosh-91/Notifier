@@ -1,5 +1,7 @@
 namespace Notifier.Enums;
-
+/// <summary>
+/// Notification Levels from the payload.
+/// </summary>
 public enum NotificationLevel
 {
     Info = 0,

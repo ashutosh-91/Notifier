@@ -1,32 +1,31 @@
-using System.Net;
-using Notifier.Models;
 using Notifier.Services.Interfaces;
 
 namespace Notifier.Services;
 
 public class DiscordClientService : IDiscordClientService
 {
-    private readonly HttpClient client;
-    public DiscordClientService(HttpClient httpClientFactory, IConfiguration configuration)
+    private readonly HttpClient _client;
+    public DiscordClientService(HttpClient httpClient, IConfiguration configuration)
     {
-        client = httpClientFactory;
+        _client = httpClient;
     }
-  
+
     public async Task SendMessageAsync(string channelId, string message)
     {
-        //Check if channel Id and message not null
         var payload = new
         {
             content = message
         };
 
-      
-        var response = await client.PostAsJsonAsync(
+        var response = await _client.PostAsJsonAsync(
             $"channels/{channelId}/messages",
             payload
         );
-        
-        var responseBody = await response.Content.ReadAsStringAsync();
-        Console.WriteLine(responseBody);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Discord responded with {(int)response.StatusCode} ({response.StatusCode}): {body}");
+        }
     }
 }

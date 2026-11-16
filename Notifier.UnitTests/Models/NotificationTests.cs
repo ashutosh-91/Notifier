@@ -4,6 +4,7 @@ using Notifier.Models;
 
 namespace Notifier.UnitTests.Models;
 
+[TestFixture]
 public class NotificationTests
 {
     private static ParameterInfo MessageParameter() =>
@@ -13,16 +14,16 @@ public class NotificationTests
             .GetParameters()
             .Single(p => p.Name == nameof(Notification.Message));
 
-    [Fact]
+    [Test]
     public void Message_declares_the_required_and_length_constraints()
     {
         var parameter = MessageParameter();
 
-        Assert.NotNull(parameter.GetCustomAttribute<RequiredAttribute>());
+        Assert.That(parameter.GetCustomAttribute<RequiredAttribute>(), Is.Not.Null);
 
         var length = parameter.GetCustomAttribute<StringLengthAttribute>();
-        Assert.NotNull(length);
-        Assert.Equal(1, length.MinimumLength);
-        Assert.Equal(5000, length.MaximumLength);
+        Assert.That(length, Is.Not.Null);
+        Assert.That(length!.MinimumLength, Is.EqualTo(1));
+        Assert.That(length.MaximumLength, Is.EqualTo(5000));
     }
 }

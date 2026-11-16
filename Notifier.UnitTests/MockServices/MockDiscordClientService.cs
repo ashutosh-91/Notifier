@@ -1,6 +1,6 @@
 using Notifier.Services.Interfaces;
 
-namespace Notifier.UnitTests.Fakes;
+namespace Notifier.UnitTests.MockServices;
 
 public sealed class MockDiscordClientService : IDiscordClientService
 {
