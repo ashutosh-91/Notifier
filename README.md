@@ -1,6 +1,6 @@
 # Notifier 
 
-A ASP.NET Core service that receives notifications over HTTP and forwards an LLM-written message to
+An ASP.NET Core service that receives notifications over HTTP and forwards an LLM-written message to
 Discord when the notification is a warning or worse.
 
 # Environment 
@@ -63,7 +63,6 @@ Responses:
 | `429 Too Many Requests` | Rate limit reached | ProblemDetails + `Retry-After` header |
 | `502 Bad Gateway` | The AI provider or Discord is unavailable | ProblemDetails |
 
-Error responses use the standard `application/problem+json` (RFC 9457) shape.
 
 ## Rate limiting
 
