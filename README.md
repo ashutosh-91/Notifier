@@ -66,7 +66,7 @@ Responses:
 
 ## Rate limiting
 
-I've used a Rolling Window Limiter in this we remove any send on the list that happened more than a minute ago if 10 times are still left it does not let the request process.
+  Rolling Window Limiter was used in this project we remove any send on the list that happened more than a minute ago if 10 times are still left it does not let the request process.
 
 ## Testing
 
