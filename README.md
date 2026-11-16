@@ -19,8 +19,17 @@ Discord when the notification is a warning or worse.
  - Notifier.IntegrationTests
 
 # Architecture
- - It is divided into Models , Controllers , Services 
- - Notifier is the main application , Notifier.UnitTests and IntegrationTests hosts the testing.
+- The code organised into separate layers to keep things simple, maintainable, and easy to extend.
+
+- Controllers: Handle incoming HTTP requests, call the appropriate service, and return the response with the correct status code.
+
+- Services: NotificationClassifierService handles the main application logic. It checks the rate limit, classifies the notification using AI, and sends it to Discord if the severity is Warning or higher.
+
+- Models: Contains the data structures used throughout the application, such as Notification.
+
+- Interfaces: Define how the application communicates with external services like OpenAI and Discord, without depending on their actual implementations.
+
+- External Services: AiProviderService and DiscordClientService handle the actual API communication with OpenAI and Discord.
 
 ## Configuration
 
