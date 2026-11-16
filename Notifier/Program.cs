@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
 using Notifier.Models;
 using Notifier.Services;
 using Notifier.Services.Interfaces;
@@ -24,16 +23,7 @@ builder.Services.AddOptions<Ai>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-// Cap outbound notifications at 10/minute.
-builder.Services.AddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
-    new TokenBucketRateLimiterOptions
-    {
-        TokenLimit = 10,
-        TokensPerPeriod = 10,
-        ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-        AutoReplenishment = true,
-        QueueLimit = 0
-    }));
+builder.Services.AddSingleton(new RollingWindowRateLimiter(limit: 10, window: TimeSpan.FromMinutes(1)));
 
 var app = builder.Build();
 

@@ -1,4 +1,3 @@
-using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using Notifier.Enums;
 using Notifier.Models;
@@ -6,7 +5,7 @@ using Notifier.Services.Interfaces;
 
 namespace Notifier.Services;
 
-public class NotificationClassifierService(IConfiguration configuration, IAiProviderService aiService, IDiscordClientService discordClientService, IOptions<Ai> aiOptions, RateLimiter rateLimiter)
+public class NotificationClassifierService(IConfiguration configuration, IAiProviderService aiService, IDiscordClientService discordClientService, IOptions<Ai> aiOptions, RollingWindowRateLimiter rateLimiter)
 {
 
     public async Task<NotificationResult> ClassifyAndSendAsync(Notification notification, CancellationToken cancellationToken = default)
@@ -16,16 +15,11 @@ public class NotificationClassifierService(IConfiguration configuration, IAiProv
             return new NotificationResult(NotificationOutcome.NotForwarded);
         }
 
-        using var lease = rateLimiter.AttemptAcquire(1);
-        if (!lease.IsAcquired)
+        if (!rateLimiter.TrySend(out var retryAfter))
         {
-            var retryAfter = lease.TryGetMetadata(MetadataName.RetryAfter, out var value) && value is TimeSpan retry
-                ? retry
-                : (TimeSpan?)null;
-
             return new NotificationResult(NotificationOutcome.RateLimited, RetryAfter: retryAfter);
         }
-
+        return new NotificationResult(NotificationOutcome.Forwarded, "message");
         string? message;
         try
         {

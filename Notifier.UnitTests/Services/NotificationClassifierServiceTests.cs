@@ -1,5 +1,4 @@
 using System.Net;
-using System.Threading.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Notifier.Enums;
@@ -15,7 +14,7 @@ public class NotificationClassifierServiceTests
     private const string SystemPrompt = "classify";
     private const string ChannelId = "42";
 
-    private static (NotificationClassifierService Service, MockAiProviderService Ai, MockDiscordClientService Discord) CreateService(RateLimiter? limiter = null)
+    private static (NotificationClassifierService Service, MockAiProviderService Ai, MockDiscordClientService Discord) CreateService(RollingWindowRateLimiter? limiter = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -38,14 +37,8 @@ public class NotificationClassifierServiceTests
         return (new NotificationClassifierService(configuration, ai, discord, aiOptions, limiter ?? CreateLimiter()), ai, discord);
     }
 
-    private static TokenBucketRateLimiter CreateLimiter(int tokenLimit = 10) =>
-        new(new TokenBucketRateLimiterOptions
-        {
-            TokenLimit = tokenLimit,
-            TokensPerPeriod = 1,
-            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-            AutoReplenishment = false
-        });
+    private static RollingWindowRateLimiter CreateLimiter(int limit = 10) =>
+        new(limit, TimeSpan.FromMinutes(1));
 
     [Test]
     public async Task Info_notification_is_not_forwarded()
@@ -83,7 +76,7 @@ public class NotificationClassifierServiceTests
     [Test]
     public async Task Notification_is_dropped_when_rate_limited()
     {
-        var (service, ai, discord) = CreateService(CreateLimiter(tokenLimit: 1));
+        var (service, ai, discord) = CreateService(CreateLimiter(limit: 1));
 
         await service.ClassifyAndSendAsync(new Notification(1, NotificationLevel.Warning, "first"));
         var result = await service.ClassifyAndSendAsync(new Notification(2, NotificationLevel.Warning, "second"));

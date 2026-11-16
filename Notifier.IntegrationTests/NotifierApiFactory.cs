@@ -1,10 +1,10 @@
-using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Notifier.IntegrationTests.Fakes;
+using Notifier.Services;
 using Notifier.Services.Interfaces;
 
 namespace Notifier.IntegrationTests;
@@ -47,15 +47,8 @@ public sealed class NotifierApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IDiscordClientService>();
             services.AddSingleton<IDiscordClientService>(Discord);
 
-            services.RemoveAll<RateLimiter>();
-            services.AddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
-                new TokenBucketRateLimiterOptions
-                {
-                    TokenLimit = RateLimitTokens,
-                    TokensPerPeriod = 1,
-                    ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-                    AutoReplenishment = false
-                }));
+            services.RemoveAll<RollingWindowRateLimiter>();
+            services.AddSingleton(new RollingWindowRateLimiter(limit: RateLimitTokens, window: TimeSpan.FromMinutes(1)));
         });
     }
 }
